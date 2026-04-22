@@ -1,0 +1,1551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+    <title>High Fidelity Game - LAN Multiplayer</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; touch-action: none; }
+        
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; }
+        #crosshair { display: none; position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); pointer-events: none; z-index: 100; }
+        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(0, 210, 255, 0.9); box-shadow: 0 0 4px #00d2ff; }
+        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; } 
+        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; } 
+        
+        /* Loading Screen */
+        #loading { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: radial-gradient(circle at center, #0f172a 0%, #000000 100%);
+            color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            z-index: 9999; backdrop-filter: blur(20px); transition: opacity 0.6s ease-in-out;
+            pointer-events: auto;
+        }
+        #loading-text { font-size: 28px; font-weight: 800; margin-bottom: 25px; letter-spacing: 4px; color: #fff; text-shadow: 0 0 15px rgba(0, 212, 255, 0.8); }
+        #loading-bar-bg { width: 400px; max-width: 80%; height: 4px; background: rgba(255,255,255,0.05); border-radius: 2px; overflow: hidden; margin-bottom: 40px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.8); }
+        #loading-bar-fill { width: 0%; height: 100%; background: #00d2ff; transition: width 0.15s ease-out; box-shadow: 0 0 15px #00d2ff, 0 0 5px #fff; }
+        
+        #hud { position: absolute; bottom: 30px; left: 30px; color: rgba(255,255,255,0.9); font-size: 14px; background: rgba(0,0,0,0.5); padding: 15px 25px; border-radius: 8px; border-left: 4px solid #00d2ff; display: block; backdrop-filter: blur(4px); }
+        
+        #axis-fps-global { position: fixed; top: 10px; left: 10px; z-index: 9000; pointer-events: auto; width: 230px; background: rgba(6,10,15,0.7); border: 1px solid rgba(50, 50, 50, 0.8); padding: 8px; border-radius: 8px; color: #ddd; font-family: monospace; font-size: 12px; backdrop-filter: blur(6px); box-shadow: 0 6px 18px rgba(0,0,0,0.6); }
+        #axis-fps-global label { margin-right: 8px; display: inline-flex; align-items: center; gap:6px; cursor: pointer; }
+        #fps-counter { color: #00d2ff; font-weight:700; margin-left:6px; }
+        #axis-fps-global .small { font-size:11px; color:#bbb; margin-top:6px; display:block; }
+        
+        .toggle-btn { background: #333; color: white; border: 1px solid #555; padding: 5px 10px; cursor: pointer; border-radius: 4px; margin-right: 5px; }
+        .toggle-btn:hover { background: #555; }
+
+        #interact-hint { display: none !important; }
+
+        /* --- MOBILE CONTROLS UI --- */
+        #mobile-controls { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 15; }
+        .touch-btn { position: absolute; pointer-events: auto; background: rgba(0, 0, 0, 0.4); border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 50%; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; backdrop-filter: blur(4px); text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+        .touch-btn:active, .touch-btn.active-toggle { background: rgba(0, 212, 255, 0.6); border-color: #00d2ff; }
+        
+        #joy-zone { position: absolute; bottom: 30px; left: 30px; width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.15); pointer-events: auto; }
+        #joy-knob { position: absolute; top: 50%; left: 50%; width: 50px; height: 50px; border-radius: 50%; background: rgba(0, 212, 255, 0.5); transform: translate(-50%, -50%); pointer-events: none; box-shadow: 0 0 10px rgba(0,212,255,0.5); }
+        
+        #touch-look-zone { position: absolute; top: 0; right: 0; width: 50%; height: 100%; pointer-events: auto; }
+        
+        #btn-jump { bottom: 40px; right: 40px; width: 70px; height: 70px; font-size: 14px; }
+        #btn-switch-char { bottom: 40px; right: 130px; width: 60px; height: 60px; font-size: 10px; text-align: center; line-height: 1.1; }
+        #btn-sprint { bottom: 130px; right: 80px; width: 55px; height: 55px; font-size: 12px; }
+        #btn-cam-swap { top: 20px; right: 20px; width: 50px; height: 50px; font-size: 12px; }
+        
+        #btn-spawn-car { display: none; top: 80px; right: 20px; width: 60px; height: 60px; font-size: 11px; text-align: center; line-height: 1.2; z-index: 20; }
+        #btn-chat-mobile { top: 150px; right: 20px; width: 50px; height: 50px; font-size: 10px; z-index: 20; }
+
+        #btn-interact { display: none; bottom: 130px; right: 160px; width: 50px; height: 50px; font-size: 14px; font-family: 'Segoe UI', sans-serif; background: rgba(10, 10, 10, 0.6); border: 1px solid rgba(255, 255, 255, 0.4); color: white; text-align: center; line-height: 1.2; z-index: 20; border-radius: 50%; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.4); text-shadow: none; }
+        #btn-interact:active { background: rgba(255, 255, 255, 0.9); color: #000; border-color: #fff; }
+
+        #btn-passenger { display: none; bottom: 130px; right: 220px; width: 50px; height: 50px; font-size: 14px; font-family: 'Segoe UI', sans-serif; background: rgba(10, 10, 10, 0.6); border: 1px solid rgba(255, 255, 255, 0.4); color: white; text-align: center; line-height: 1.2; z-index: 20; border-radius: 50%; backdrop-filter: blur(5px); box-shadow: 0 4px 10px rgba(0,0,0,0.4); text-shadow: none; }
+        #btn-passenger:active { background: rgba(255, 255, 255, 0.9); color: #000; border-color: #fff; }
+
+        #btn-horn { display: none; bottom: 200px; right: 160px; width: 50px; height: 50px; font-size: 11px; font-family: 'Segoe UI', sans-serif; background: rgba(10, 10, 10, 0.6); border: 1px solid rgba(255, 255, 255, 0.4); color: white; text-align: center; line-height: 1; z-index: 20; border-radius: 50%; backdrop-filter: blur(5px); }
+        #btn-horn:active, #btn-horn.active-toggle { background: rgba(255, 50, 50, 0.8); border-color: #ffaaaa; }
+
+        @media (max-width: 900px) {
+            #mobile-controls { display: block; }
+            #hud { display: none !important; }
+            #axis-fps-global { display: none !important; }
+        }
+
+        /* --- MODERN GLASSMORPHISM LOBBY UI --- */
+        #lobby-ui { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%); z-index: 8000; pointer-events: auto; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        
+        /* Animated subtle ambient blobs */
+        #lobby-ui::after { content:''; position:absolute; top:-20%; left:-10%; width:50vw; height:50vw; background: radial-gradient(circle, rgba(0, 210, 255, 0.08) 0%, transparent 60%); border-radius: 50%; filter: blur(40px); animation: floatBlob 15s infinite alternate ease-in-out; pointer-events: none; }
+        #lobby-ui::before { content:''; position:absolute; bottom:-20%; right:-10%; width:60vw; height:60vw; background: radial-gradient(circle, rgba(138, 43, 226, 0.06) 0%, transparent 60%); border-radius: 50%; filter: blur(40px); animation: floatBlob 20s infinite alternate-reverse ease-in-out; pointer-events: none; }
+        @keyframes floatBlob { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(50px, 50px) scale(1.1); } }
+
+        .lobby-container { display: flex; flex-direction: row; width: 100%; height: 100%; max-width: 1300px; margin: 0 auto; padding: 40px; box-sizing: border-box; gap: 24px; position: relative; z-index: 2; align-items: stretch; }
+        
+        .lobby-panel { background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 16px 32px rgba(0,0,0,0.3); transition: transform 0.3s ease; }
+        .lobby-title { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 24px; text-transform: uppercase; letter-spacing: 1.5px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+        
+        .players-panel { flex: 1; min-width: 250px; }
+        #lobby-player-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 10px; }
+        
+        /* Modern Player Cards */
+        #lobby-player-list li { background: rgba(255,255,255,0.05); border-radius: 10px; border-left: 4px solid #00d2ff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; transition: all 0.2s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        #lobby-player-list li:hover { background: rgba(255,255,255,0.1); transform: translateX(4px); }
+        #lobby-player-list li.is-host { border-left-color: #ffaa00; }
+        
+        .player-info { display: flex; align-items: center; gap: 12px; }
+        .player-avatar { width: 36px; height: 36px; background: linear-gradient(135deg, #00d2ff, #3a7bd5); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #fff; box-shadow: 0 2px 8px rgba(0,210,255,0.4); }
+        .player-name { font-weight: 600; font-size: 15px; color: #fff; display: flex; align-items: center; gap: 8px; }
+        .badge-me { font-size: 10px; background: rgba(0, 210, 255, 0.2); color: #00d2ff; padding: 2px 6px; border-radius: 4px; font-weight: 800; }
+        .badge-host { font-size: 10px; background: rgba(255, 170, 0, 0.2); color: #ffaa00; padding: 2px 6px; border-radius: 4px; font-weight: 800; border: 1px solid rgba(255, 170, 0, 0.3); }
+        .badge-ping { font-size: 11px; color: #4ade80; font-weight: 600; }
+        
+        .center-panel { flex: 1.5; align-items: center; }
+        .input-group { margin-bottom: 24px; width: 100%; }
+        .input-group label { display: block; margin-bottom: 8px; color: #94a3b8; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+        .lobby-input { width: 100%; padding: 14px 16px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 8px; font-size: 16px; outline: none; box-sizing: border-box; transition: all 0.3s; font-family: inherit; }
+        .lobby-input:focus { border-color: #00d2ff; background: rgba(0,0,0,0.5); box-shadow: 0 0 0 3px rgba(0, 210, 255, 0.15); }
+        
+        .char-select-btns { display: flex; gap: 12px; width: 100%; }
+        .char-btn { flex: 1; padding: 16px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-weight: 600; font-size: 14px; position: relative; overflow: hidden; }
+        .char-btn::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.05), transparent); transform: translateX(-100%); transition: 0.5s; }
+        .char-btn:hover::before { transform: translateX(100%); }
+        .char-btn:hover { color: #fff; border-color: rgba(255,255,255,0.3); }
+        .char-btn.active { background: rgba(0, 210, 255, 0.1); border-color: #00d2ff; color: #fff; box-shadow: inset 0 0 20px rgba(0, 210, 255, 0.1); }
+        
+        #btn-start-match { margin-top: auto; padding: 22px; background: linear-gradient(135deg, #00d2ff, #0088ff); color: #fff; border: none; border-radius: 12px; font-size: 18px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: 3px; transition: all 0.3s; display: none; width: 100%; box-shadow: 0 10px 25px rgba(0, 210, 255, 0.3); text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+        #btn-start-match:hover { transform: translateY(-3px); box-shadow: 0 15px 35px rgba(0, 210, 255, 0.4); filter: brightness(1.1); }
+        #btn-start-match:active { transform: translateY(1px); }
+        
+        #waiting-msg { margin-top: auto; color: #fff; font-size: 15px; font-weight: 600; text-align: center; width: 100%; padding: 20px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+        .loading-dots::after { content: '.'; animation: dots 1.5s steps(5, end) infinite; }
+        @keyframes dots { 0%, 20% { color: transparent; text-shadow: .25em 0 0 transparent, .5em 0 0 transparent; } 40% { color: #00d2ff; text-shadow: .25em 0 0 transparent, .5em 0 0 transparent; } 60% { text-shadow: .25em 0 0 #00d2ff, .5em 0 0 transparent; } 80%, 100% { text-shadow: .25em 0 0 #00d2ff, .5em 0 0 #00d2ff; } }
+
+        /* Minimal Collapsible Debug */
+        .debug-wrapper { width: 100%; margin-bottom: 15px; }
+        .debug-toggle { background: transparent; border: none; color: #64748b; font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 5px; margin: 0 auto; text-transform: uppercase; letter-spacing: 1px; }
+        .debug-toggle:hover { color: #94a3b8; }
+        #debug-host-info { display: none; color: #64748b; font-family: monospace; font-size: 11px; text-align: left; background: rgba(0,0,0,0.4); padding: 12px; border-radius: 8px; margin-top: 8px; border: 1px solid rgba(255,255,255,0.05); line-height: 1.5; }
+
+        .chat-panel { flex: 1; min-width: 250px; }
+        #chat-messages { flex: 1; overflow-y: auto; margin-bottom: 16px; background: rgba(0,0,0,0.3); border-radius: 8px; padding: 16px; font-size: 14px; display: flex; flex-direction: column; gap: 10px; border: 1px solid rgba(255,255,255,0.05); }
+        .chat-msg { word-break: break-word; line-height: 1.4; color: #e2e8f0; }
+        .chat-msg .sender { color: #00d2ff; font-weight: 700; margin-right: 6px; }
+        #chat-form { display: flex; gap: 10px; }
+        #chat-input { flex: 1; padding: 12px; border-radius: 8px; font-size: 14px; }
+        #chat-submit { padding: 0 20px; background: rgba(0, 210, 255, 0.1); color: #00d2ff; border: 1px solid rgba(0, 210, 255, 0.3); border-radius: 8px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        #chat-submit:hover { background: #00d2ff; color: #000; }
+
+        /* IN-GAME NAME CHANGER */
+        #ingame-name-ui { display: none; position: absolute; top: 20px; right: 20px; z-index: 25; pointer-events: auto; }
+        #ingame-name-input { background: rgba(0, 0, 0, 0.6); color: #00d2ff; border: 1px solid rgba(0, 212, 255, 0.5); padding: 8px 12px; border-radius: 6px; font-size: 14px; font-weight: bold; outline: none; width: 120px; text-align: center; backdrop-filter: blur(5px); }
+        #ingame-name-input:focus { border-color: #00d2ff; box-shadow: 0 0 10px rgba(0,212,255,0.4); width: 160px; }
+
+        /* IN-GAME CHAT UI */
+        #ingame-chat-ui { display: none; position: absolute; bottom: 100px; left: 30px; width: 300px; z-index: 25; pointer-events: auto; }
+        #ingame-chat-messages { height: 150px; overflow-y: auto; background: rgba(0,0,0,0.4); border-radius: 6px 6px 0 0; padding: 10px; font-size: 13px; color: white; display: flex; flex-direction: column; gap: 5px; text-shadow: 1px 1px 2px black; pointer-events: none; border: 1px solid rgba(255,255,255,0.1); border-bottom: none; backdrop-filter: blur(5px); }
+        #ingame-chat-form { display: flex; background: rgba(0,0,0,0.6); border-radius: 0 0 6px 6px; border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(5px); }
+        #ingame-chat-input { flex: 1; background: transparent; border: none; color: white; padding: 10px; font-size: 13px; outline: none; }
+        #ingame-chat-submit { background: #00d2ff; border: none; color: black; font-weight: bold; padding: 0 15px; border-radius: 0 0 6px 0; cursor: pointer; }
+
+        /* NAME TAGS */
+        #name-tags-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; overflow: hidden; }
+        .player-name-tag { position: absolute; color: white; font-weight: bold; font-size: 14px; text-shadow: 1px 1px 2px black, -1px -1px 2px black, 1px -1px 2px black, -1px 1px 2px black; text-align: center; transform: translate(-50%, -50%); opacity: 0.9; transition: left 0.1s linear, top 0.1s linear; }
+
+        @media (max-width: 900px) {
+            .lobby-container { flex-direction: column; padding: 15px; gap: 15px; overflow-y: auto; align-items: stretch; justify-content: flex-start; }
+            .lobby-panel { padding: 15px; }
+            .lobby-title { font-size: 16px; margin-bottom: 15px; }
+            .players-panel, .chat-panel { flex: none; height: auto; max-height: 250px; }
+            .center-panel { flex: none; order: -1; } /* Bring prep to top */
+            #btn-start-match { padding: 15px; font-size: 16px; }
+            #ingame-name-ui { top: 10px; right: 10px; }
+            #ingame-chat-ui { bottom: 100px; left: 10px; width: 220px; }
+        }
+    </style>
+    
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="name-tags-container"></div>
+        <div id="crosshair"></div>
+        <div id="loading">
+            <div id="loading-text">LOADING 0%</div>
+            <div id="loading-bar-bg"><div id="loading-bar-fill"></div></div>
+        </div>
+        
+        <div id="interact-hint"></div>
+        <div id="hud">
+            <b>WASD</b> Move/Drive | <b>SHIFT</b> Sprint | <b>SPACE</b> Jump/Brake | <b>C</b> Switch Char | <b>V</b> Change Camera <br>
+            <b>F8</b> Spawn Car | <b>F</b> Enter Driver/Kick | <b>G</b> Enter Passenger | <b>E</b> Horn | <b>T</b> Chat
+        </div>
+        
+        <div id="ingame-name-ui">
+            <input type="text" id="ingame-name-input" maxlength="15" placeholder="Player Name">
+        </div>
+
+        <div id="ingame-chat-ui">
+            <div id="ingame-chat-messages"></div>
+            <form id="ingame-chat-form">
+                <input type="text" id="ingame-chat-input" placeholder="Type message..." autocomplete="off">
+                <button type="submit" id="ingame-chat-submit">></button>
+            </form>
+        </div>
+    </div>
+
+    <!-- PURE 2D LOBBY UI (Modernized) -->
+    <div id="lobby-ui">
+        <div class="lobby-container">
+            <div class="lobby-panel players-panel">
+                <div class="lobby-title">
+                    <span>Squad Status</span>
+                    <span style="font-size: 10px; color:#4ade80; display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:6px; height:6px; background:#4ade80; border-radius:50%; box-shadow:0 0 5px #4ade80;"></span> ONLINE</span>
+                </div>
+                <ul id="lobby-player-list"></ul>
+            </div>
+            
+            <div class="lobby-panel center-panel">
+                <div class="lobby-title">Deployment Prep</div>
+                <div class="input-group">
+                    <label>Callsign (Name)</label>
+                    <input type="text" id="player-name-input" class="lobby-input" value="Player" maxlength="15">
+                </div>
+                <div class="input-group">
+                    <label>Select Operative</label>
+                    <div class="char-select-btns">
+                        <button class="char-btn active" data-char="0">Character 1</button>
+                        <button class="char-btn" data-char="1">Character 2</button>
+                    </div>
+                </div>
+                
+                <div class="debug-wrapper">
+                    <button class="debug-toggle" onclick="const e=document.getElementById('debug-host-info'); e.style.display=e.style.display==='block'?'none':'block';">▼ Network Debug</button>
+                    <div id="debug-host-info">Waiting for network...</div>
+                </div>
+
+                <button id="btn-start-match">INITIALIZE DEPLOYMENT</button>
+                <div id="waiting-msg">Waiting for host<span class="loading-dots"></span></div>
+            </div>
+            
+            <div class="lobby-panel chat-panel">
+                <div class="lobby-title">Comms</div>
+                <div id="chat-messages"></div>
+                <form id="chat-form">
+                    <input type="text" id="chat-input" class="lobby-input" placeholder="Transmit message..." autocomplete="off">
+                    <button type="submit" id="chat-submit">SEND</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="mobile-controls">
+        <div id="touch-look-zone"></div>
+        <div id="joy-zone"><div id="joy-knob"></div></div>
+        
+        <div id="btn-spawn-car" class="touch-btn">F8<br>CAR</div>
+        <div id="btn-chat-mobile" class="touch-btn">CHAT</div>
+
+        <div id="btn-jump" class="touch-btn">JUMP</div>
+        <div id="btn-switch-char" class="touch-btn">SWITCH<br>CHAR</div>
+        <div id="btn-sprint" class="touch-btn">SPRINT</div>
+        <div id="btn-cam-swap" class="touch-btn">CAM</div>
+
+        <div id="btn-interact" class="touch-btn">DRIVE</div>
+        <div id="btn-passenger" class="touch-btn">PASS</div>
+
+        <div id="btn-horn" class="touch-btn">HORN</div>
+    </div>
+
+    <div id="axis-fps-global">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="font-weight:700; color:#00d2ff">DEBUG</div>
+            <div style="font-size:11px; color:#aaa">v13 Complete LAN Polish</div>
+        </div>
+        <div class="small">FPS: <span id="fps-counter">0</span></div>
+        <div class="small" style="color: #ffaa00; margin-top: 6px;">POS: <span id="pos-display">0.00, 0.00, 0.00</span></div>
+        <div style="margin-top:8px;">
+            <label><input type="checkbox" id="axis-x"> <span style="color:#ff4444">X</span></label>
+            <label><input type="checkbox" id="axis-y"> <span style="color:#44ff44">Y</span></label>
+            <label><input type="checkbox" id="axis-z"> <span style="color:#4444ff">Z</span></label>
+        </div>
+        <div style="margin-top:8px; display:flex; gap:6px;">
+            <button id="show-global-axis" class="toggle-btn" style="flex:1; padding:6px 8px;">Global</button>
+        </div>
+        <div style="margin-top:8px; display:flex; gap:6px;">
+            <button id="perf-toggle" class="toggle-btn" style="flex:1; padding:6px 8px;">Perf Mode</button>
+            <button id="shadow-toggle" class="toggle-btn" style="flex:1; padding:6px 8px;">Shadows</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+        import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+        import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+        import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+        import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+        // --- PURE LAN NETWORK MANAGER (NO FIREBASE) ---
+        class LANNetworkManager {
+            constructor() {
+                this.uid = 'player_' + Math.floor(Math.random() * 1000000);
+                this.isHost = false;
+                this.hostId = null;
+                this.peers = new Set();
+                this.listeners = {};
+                
+                this.channel = new BroadcastChannel('high_fidelity_lan');
+                this.channel.onmessage = (e) => this._onMessage(e.data);
+
+                this.ws = null;
+                try {
+                    this.ws = new WebSocket(`ws://${window.location.hostname}:8080`);
+                    this.ws.onopen = () => this.broadcast('ping', { isHost: this.isHost });
+                    this.ws.onmessage = (e) => { try { this._onMessage(JSON.parse(e.data)); } catch(err){} };
+                } catch(e) {}
+
+                // Host Election Fallback
+                setTimeout(() => {
+                    if (!this.hostId) {
+                        this.isHost = true;
+                        this.hostId = this.uid;
+                        this.trigger('host_changed', this.uid);
+                    }
+                    this.broadcast('ping', { isHost: this.isHost });
+                }, 500);
+
+                window.addEventListener('beforeunload', () => {
+                    this.broadcast('player_leave', {});
+                });
+            }
+
+            on(type, callback) {
+                if (!this.listeners[type]) this.listeners[type] = [];
+                this.listeners[type].push(callback);
+            }
+
+            trigger(type, data, sender) {
+                if (this.listeners[type]) this.listeners[type].forEach(cb => cb(data, sender));
+            }
+
+            broadcast(type, data) {
+                const payload = { type, sender: this.uid, data };
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(payload));
+                this.channel.postMessage(payload);
+            }
+
+            _onMessage(msg) {
+                if (msg.sender === this.uid) return; 
+                this.peers.add(msg.sender); 
+                
+                if (msg.type === 'ping') {
+                    this.broadcast('pong', { isHost: this.isHost, gameState: window.currentGameState });
+                    if (msg.data.isHost) {
+                        if (this.isHost && this.uid > msg.sender) this.isHost = false; 
+                        if (!this.isHost) {
+                            this.hostId = msg.sender;
+                            this.trigger('host_changed', this.hostId);
+                        }
+                    }
+                }
+                
+                if (msg.type === 'pong') {
+                    if (msg.data.isHost) {
+                        if (this.isHost && this.uid > msg.sender) this.isHost = false; 
+                        if (!this.isHost) {
+                            this.hostId = msg.sender;
+                            this.trigger('host_changed', this.hostId);
+                        }
+                    }
+                    if (msg.data.gameState === 'playing' && window.currentGameState === 'lobby') {
+                        this.trigger('start_match', {}); 
+                    }
+                }
+
+                if (msg.type === 'player_leave') {
+                    this.peers.delete(msg.sender);
+                    if (this.hostId === msg.sender) {
+                        const remaining = Array.from(this.peers);
+                        remaining.push(this.uid);
+                        remaining.sort();
+                        this.isHost = (remaining[0] === this.uid);
+                        this.hostId = remaining[0];
+                        this.trigger('host_changed', this.hostId);
+                    }
+                }
+
+                this.trigger(msg.type, msg.data, msg.sender);
+            }
+        }
+
+        const network = new LANNetworkManager();
+
+        THREE.Cache.enabled = true;
+        const isMobile = window.innerWidth <= 900 || /Android|webOS|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+        const CONFIG = {
+            walkSpeed: 2.0, runSpeed: 6.5, gravity: -9.8 * 2.5, jumpForce: 8.0, 
+            rotSpeed: 8.0, camSmoothness: 0.1
+        };
+
+        const CAR_CONFIG = {
+            spawnPos: new THREE.Vector3(72, -53.93, -95), 
+            scale: 30, maxSpeed: 30.0, acceleration: 15.0, braking: 25.0, friction: 5.0, steerSpeed: 2.0, interactionDist: 4.0
+        };
+
+        const SEAT_POSITIONS = {
+            driver: new THREE.Vector3(0.1, 0.7, 0.2),     
+            passenger: new THREE.Vector3(-0.9, 0.7, 0.3)    
+        };
+
+        const CAR_CAMERA_MODES = [
+            { name: "TPS_NEAR", dist: 5.0, height: 2.0 },
+            { name: "TPS_MID",  dist: 8.0, height: 3.0 },
+            { name: "TPS_FAR",  dist: 12.0, height: 4.5 }
+        ];
+
+        const SPAWN_POINTS = {
+            player1: new THREE.Vector3(70, -53.93, -100.96),
+            player2: new THREE.Vector3(75, -53.93, -100.96)
+        };
+
+        const CAMERA_MODES = [
+            { name: "TPS_CLOSE", dist: 1.2, height: 1.5 },
+            { name: "FPS",       dist: 0.0, height: 1.65 },
+            { name: "TPS_MID",   dist: 2.2, height: 1.7 }, 
+            { name: "TPS_FAR",   dist: 4.5, height: 2.2 }
+        ];
+        
+        let currentCamIndex = 2;
+        let currentCarCamIndex = 1; 
+
+        let scene, camera, renderer, composer, clock;
+        
+        let baseCharacters = [];
+        let characters = []; 
+        let activeCharIndex = 0;
+        
+        // Multi-spawn protection
+        let carSpawnLocked = false;
+
+        let carData = {
+            mesh: null, mixer: null, driveAction: null, 
+            isSpawned: false, driverId: null, passengerId: null,
+            speed: 0, steerAngle: 0
+        };
+
+        let isSwitching = false, switchTime = 0, switchDuration = 3.0;
+        let switchStartCamPos = new THREE.Vector3(), switchTargetCamPos = new THREE.Vector3();
+        let switchStartLookAt = new THREE.Vector3(), switchTargetLookAt = new THREE.Vector3();
+        let switchControlPoint = new THREE.Vector3();
+
+        let isGameReady = false;
+        let performanceMode = isMobile;
+        let shadowsEnabled = !isMobile;
+        let composerEnabled = !isMobile;
+        let envMapTexture = null;
+        let bloomPass = null, fxaaPass = null;
+        let maxAnisotropy = 1;
+
+        let collidableMeshList = [], terrainMeshList = []; 
+        let downRay = new THREE.Raycaster(), forwardRay = new THREE.Raycaster(), carRay = new THREE.Raycaster();
+        downRay.far = 4.0; forwardRay.far = 1.5; carRay.far = 3.0; 
+
+        const keys = { w: false, a: false, s: false, d: false, shift: false, space: false, q: false, e: false, f: false, g: false, f8: false };
+        const camState = { angleX: 0, angleY: Math.PI / 8, curDist: 3.0, curHeight: 1.9 };
+
+        const joystick = { active: false, x: 0, y: 0, id: null };
+        const touchLook = { id: null, lastX: 0, lastY: 0 };
+        let mobileSprintToggle = false;
+
+        let pmremGenerator = null, listener;
+        const sounds = {}; 
+        let engineState = 'off'; 
+
+        let axisGroup = null, axisX = null, axisY = null, axisZ = null, showGlobalAxis = false;
+        let fpsCounterEl = null, _frameCount = 0, _lastFpsTime = performance.now();
+
+        const loadingManager = new THREE.LoadingManager();
+
+        window.currentGameState = 'loading'; 
+        let playerName = "Player_" + Math.floor(Math.random()*1000);
+        let localCarRole = 'none'; 
+
+        let remotePlayers = {}; 
+        let targetCarPos = new THREE.Vector3();
+        let targetCarRot = 0;
+
+        init();
+        animate();
+
+        function init() {
+            setupLoadingManager();
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" }); 
+            renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio || 1, 1.5));
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = shadowsEnabled; 
+            renderer.shadowMap.type = isMobile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+            renderer.outputColorSpace = THREE.SRGBColorSpace;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.2;
+            document.body.appendChild(renderer.domElement);
+
+            maxAnisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), isMobile ? 4 : 8);
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x8cb6d9);
+            scene.fog = new THREE.FogExp2(0x8cb6d9, 0.0015);
+            clock = new THREE.Clock();
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+            scene.add(camera);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.85); 
+            scene.add(ambientLight);
+
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+            hemiLight.position.set(0, 50, 0);
+            scene.add(hemiLight);
+
+            const cameraFillLight = new THREE.PointLight(0xffffff, 0.6, 30);
+            cameraFillLight.position.set(0, 0, 0); 
+            camera.add(cameraFillLight);
+
+            const sunLight = new THREE.DirectionalLight(0xfff5e6, 3.5);
+            sunLight.position.set(100, 200, 100);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.set(isMobile ? 1024 : 2048, isMobile ? 1024 : 2048); 
+            sunLight.shadow.camera.left = -250; sunLight.shadow.camera.right = 250;
+            sunLight.shadow.camera.top = 250; sunLight.shadow.camera.bottom = -250;
+            sunLight.shadow.camera.near = 0.5; sunLight.shadow.camera.far = 1000;
+            sunLight.shadow.bias = -0.0005;
+            scene.add(sunLight);
+
+            pmremGenerator = new THREE.PMREMGenerator(renderer);
+            pmremGenerator.compileEquirectangularShader();
+
+            new RGBELoader(loadingManager).load('hdri.hdr', function(hdrTexture) {
+                try {
+                    envMapTexture = pmremGenerator.fromEquirectangular(hdrTexture).texture;
+                    scene.environment = envMapTexture;
+                    if (!performanceMode) scene.background = envMapTexture;
+                } catch (e) {}
+                hdrTexture.dispose();
+            }, undefined, function(err) {});
+
+            createAxisHelpers(5);
+
+            const mapLoader = new GLTFLoader(loadingManager);
+            mapLoader.load('map.glb', (gltf) => {
+                const map = gltf.scene;
+                map.name = "MyGameMap";
+                map.position.set(-100, -60, 300);
+                map.scale.set(100, 100, 100);
+
+                map.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = shadowsEnabled;
+                        child.receiveShadow = true;
+                        collidableMeshList.push(child);
+                        terrainMeshList.push(child);
+
+                        if (child.material) {
+                            child.material.metalness = child.material.metalness !== undefined ? child.material.metalness : 0.1;
+                            child.material.roughness = performanceMode ? 0.6 : (child.material.roughness || 0.4);
+                            child.material.envMapIntensity = performanceMode ? 0.8 : 1.5; 
+                            child.material.side = THREE.FrontSide;
+                            if(child.material.map) child.material.map.anisotropy = maxAnisotropy;
+                            if(child.material.normalMap) child.material.normalMap.anisotropy = maxAnisotropy;
+                            if(child.material.isMeshStandardMaterial) child.material.needsUpdate = true;
+                        }
+                    }
+                });
+                scene.add(map);
+            });
+
+            setupPostProcessing();
+            setupAudio();
+            setupInputs();
+            loadAssets();
+            setupLobbyUI();
+
+            fpsCounterEl = document.getElementById('fps-counter');
+            bindAxisUI();
+            applyPerformanceSettings(performanceMode);
+        }
+
+        function updateHostUI() {
+            document.getElementById('btn-start-match').style.display = network.isHost ? 'block' : 'none';
+            document.getElementById('waiting-msg').style.display = network.isHost ? 'none' : 'flex';
+            
+            const debugEl = document.getElementById('debug-host-info');
+            if (debugEl) {
+                debugEl.innerHTML = `[ID: ${network.uid}] | [HOST: ${network.hostId || 'None'}] | [IS_HOST: ${network.isHost}]`;
+            }
+        }
+
+        // --- LAN NETWORK LISTENERS ---
+        function setupNetworkListeners() {
+            network.on('host_changed', (hostId) => {
+                updateHostUI();
+                updateLobbyPlayerList();
+            });
+
+            network.on('player_state', (data, sender) => {
+                updateRemotePlayer({uid: sender, ...data});
+                updateLobbyPlayerList();
+            });
+
+            network.on('player_leave', (data, sender) => {
+                removeRemotePlayer(sender);
+                updateHostUI(); 
+                updateLobbyPlayerList();
+            });
+
+            network.on('chat_msg', (data) => {
+                addChatMessageToUI(data.senderName, data.message);
+            });
+
+            network.on('start_match', () => {
+                startMatchFromLobby();
+            });
+
+            // CAR SPAWN SYNC
+            network.on('spawn_car', (data) => {
+                carSpawnLocked = true;
+                carData.isSpawned = true;
+                carData.mesh.position.set(data.x, data.y, data.z);
+                carData.mesh.rotation.y = data.rotY;
+                carData.mesh.visible = true;
+                carData.driverId = null;
+                carData.passengerId = null;
+            });
+
+            network.on('car_state', (data) => {
+                // If late joiner missed the one-time spawn event, reconstruct it
+                if (data.active && !carData.isSpawned) {
+                    carSpawnLocked = true;
+                    carData.isSpawned = true;
+                    if(carData.mesh) carData.mesh.visible = true;
+                }
+                
+                carData.isSpawned = data.active;
+                if(carData.mesh) carData.mesh.visible = data.active;
+                
+                if (localCarRole !== 'driver' && carData.mesh) {
+                    targetCarPos.set(data.x, data.y, data.z);
+                    targetCarRot = data.rotY;
+                    carData.speed = data.speed;
+                    if (carData.mesh.position.distanceTo(targetCarPos) > 10) {
+                        carData.mesh.position.copy(targetCarPos);
+                    }
+                }
+                carData.driverId = data.driverId;
+                carData.passengerId = data.passengerId;
+            });
+
+            network.on('kick_driver', (data) => {
+                if (data.target === network.uid) forceExitCar();
+            });
+
+            setInterval(syncLocalPlayerState, 50); 
+            setInterval(syncLocalCarState, 50); 
+        }
+
+        function setupLoadingManager() {
+            loadingManager.onProgress = function(url, itemsLoaded, itemsTotal) {
+                const percent = Math.floor((itemsLoaded / itemsTotal) * 100);
+                document.getElementById('loading-text').innerText = `LOADING ${percent}%`;
+                document.getElementById('loading-bar-fill').style.width = `${percent}%`;
+            };
+
+            loadingManager.onLoad = function() {
+                renderer.compile(scene, camera);
+                document.getElementById('loading-text').innerText = "DEPLOYING...";
+                document.getElementById('loading-bar-fill').style.width = `100%`;
+                
+                setTimeout(() => {
+                    document.getElementById('loading').style.display = 'none';
+                    if (listener && listener.context && listener.context.state === 'suspended') listener.context.resume();
+                    
+                    setupNetworkListeners();
+                    setupOnlineLobby();
+                }, 800);
+            };
+        }
+
+        function setupOnlineLobby() {
+            window.currentGameState = 'lobby';
+            document.getElementById('lobby-ui').style.display = 'block';
+            
+            if (!network.hostId || (network.peers.size === 0 && !network.isHost)) {
+                network.isHost = true;
+                network.hostId = network.uid;
+            }
+            
+            updateHostUI();
+            syncLocalPlayerState();
+
+            document.getElementById('btn-start-match').onclick = () => {
+                if(network.isHost) {
+                    network.broadcast('start_match', {});
+                    startMatchFromLobby();
+                }
+            };
+        }
+
+        function startMatchFromLobby() {
+            window.currentGameState = 'playing';
+            document.getElementById('lobby-ui').style.display = 'none';
+            document.getElementById('ingame-name-ui').style.display = 'block';
+            document.getElementById('ingame-chat-ui').style.display = 'block';
+            isGameReady = true;
+
+            if (characters.length > 0) {
+                characters[0].mesh.position.copy(SPAWN_POINTS.player1);
+                characters[0].velocity.set(0,0,0);
+                if (characters.length > 1) {
+                    characters[1].mesh.position.copy(SPAWN_POINTS.player2);
+                    characters[1].velocity.set(0,0,0);
+                }
+            }
+        }
+
+        function setupLobbyUI() {
+            document.getElementById('player-name-input').value = playerName;
+            document.getElementById('ingame-name-input').value = playerName;
+
+            document.getElementById('player-name-input').addEventListener('change', (e) => {
+                playerName = e.target.value.trim() || "Player";
+                document.getElementById('ingame-name-input').value = playerName; 
+                syncLocalPlayerState();
+                updateLobbyPlayerList();
+            });
+
+            document.getElementById('ingame-name-input').addEventListener('change', (e) => {
+                playerName = e.target.value.trim() || "Player";
+                document.getElementById('player-name-input').value = playerName; 
+                syncLocalPlayerState();
+            });
+
+            const charBtns = document.querySelectorAll('.char-btn');
+            charBtns.forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    charBtns.forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    const cIdx = parseInt(e.target.getAttribute('data-char'));
+                    if (cIdx !== activeCharIndex && characters[cIdx]) {
+                        const oldPos = characters[activeCharIndex].mesh.position.clone();
+                        characters[activeCharIndex].mesh.visible = false;
+                        activeCharIndex = cIdx;
+                        characters[activeCharIndex].mesh.visible = true;
+                        characters[activeCharIndex].mesh.position.copy(oldPos);
+                        syncLocalPlayerState();
+                    }
+                });
+            });
+
+            document.getElementById('chat-form').addEventListener('submit', (e) => {
+                e.preventDefault(); submitChatMsg(document.getElementById('chat-input'));
+            });
+            document.getElementById('ingame-chat-form').addEventListener('submit', (e) => {
+                e.preventDefault(); submitChatMsg(document.getElementById('ingame-chat-input'));
+            });
+        }
+
+        function submitChatMsg(inputElement) {
+            const msg = inputElement.value.trim();
+            if(msg) {
+                network.broadcast('chat_msg', { senderName: playerName, message: msg });
+                addChatMessageToUI(playerName, msg);
+                inputElement.value = '';
+            }
+        }
+
+        function addChatMessageToUI(sender, message) {
+            const containerLobby = document.getElementById('chat-messages');
+            const elLobby = document.createElement('div');
+            elLobby.className = 'chat-msg';
+            elLobby.innerHTML = `<span class="sender">${sender}:</span>${message}`;
+            containerLobby.appendChild(elLobby);
+            containerLobby.scrollTop = containerLobby.scrollHeight;
+
+            const containerIG = document.getElementById('ingame-chat-messages');
+            const elIG = document.createElement('div');
+            elIG.innerHTML = `<b>${sender}:</b> ${message}`;
+            containerIG.appendChild(elIG);
+            containerIG.scrollTop = containerIG.scrollHeight;
+        }
+
+        // MODERN LOBBY PLAYER CARDS
+        function updateLobbyPlayerList() {
+            const list = document.getElementById('lobby-player-list');
+            list.innerHTML = '';
+            
+            const createCard = (name, isMe, isHost) => {
+                const li = document.createElement('li');
+                if (isHost) li.classList.add('is-host');
+                
+                const initials = name.substring(0, 2).toUpperCase();
+                const pingStr = isMe ? '0ms' : (Math.floor(Math.random()*20)+10) + 'ms'; // Simple visual ping
+
+                let html = `<div class="player-info">
+                                <div class="player-avatar">${initials}</div>
+                                <div class="player-name">${name} ${isMe ? '<span class="badge-me">YOU</span>' : ''}</div>
+                            </div>
+                            <div class="player-status" style="display:flex; align-items:center; gap:8px;">`;
+                
+                if (isHost) html += `<span class="badge-host">HOST</span>`;
+                html += `<span class="badge-ping">${pingStr}</span></div>`;
+                
+                li.innerHTML = html;
+                return li;
+            };
+
+            list.appendChild(createCard(playerName, true, network.isHost));
+            Object.values(remotePlayers).forEach(rp => {
+                list.appendChild(createCard(rp.name, false, network.hostId === rp.uid));
+            });
+        }
+
+        // --- ASSET LOADING ---
+        async function loadAssets() {
+            const loader = new FBXLoader(loadingManager);
+            const gltfLoader = new GLTFLoader(loadingManager);
+
+            try {
+                const animData = await Promise.all([
+                    loader.loadAsync('idle.fbx').catch(() => null), 
+                    loader.loadAsync('walk.fbx').catch(() => null),
+                    loader.loadAsync('run.fbx').catch(() => null), 
+                    loader.loadAsync('jump.fbx').catch(() => null),
+                    loader.loadAsync('fall.fbx').catch(() => null),
+                    loader.loadAsync('driver.fbx').catch(() => null),
+                    loader.loadAsync('passenger.fbx').catch(() => null)
+                ]);
+
+                async function loadAndPrepareCharacter(file, name, spawnPosition) {
+                    let charMesh;
+                    try { charMesh = await loader.loadAsync(file); } catch(e) { charMesh = await loader.loadAsync('character.fbx'); }
+                    
+                    charMesh.name = name;
+                    const box = new THREE.Box3().setFromObject(charMesh);
+                    const size = box.getSize(new THREE.Vector3());
+                    if (size.y > 0) charMesh.scale.setScalar(1.75 / size.y);
+
+                    charMesh.traverse(obj => {
+                        if (obj.isMesh) {
+                            obj.castShadow = shadowsEnabled; obj.receiveShadow = true;
+                            if (obj.material) {
+                                const processMat = (mat) => {
+                                    if (mat.map) { mat.map.anisotropy = maxAnisotropy; mat.map.colorSpace = THREE.SRGBColorSpace; }
+                                    if (mat.normalMap) mat.normalMap.anisotropy = maxAnisotropy;
+                                    mat.envMapIntensity = 1.2;
+                                    if(mat.shininess !== undefined) mat.shininess = Math.max(mat.shininess, 30);
+                                    mat.needsUpdate = true;
+                                };
+                                if (Array.isArray(obj.material)) obj.material.forEach(processMat);
+                                else processMat(obj.material);
+                            }
+                        }
+                    });
+
+                    baseCharacters.push({ mesh: charMesh, anims: animData });
+
+                    const localClone = SkeletonUtils.clone(charMesh);
+                    localClone.position.copy(spawnPosition);
+                    scene.add(localClone);
+
+                    const charMixer = new THREE.AnimationMixer(localClone);
+                    const charActions = {
+                        'idle': animData[0] ? charMixer.clipAction(animData[0].animations[0]) : null,
+                        'walk': animData[1] ? charMixer.clipAction(animData[1].animations[0]) : null,
+                        'run': animData[2] ? charMixer.clipAction(animData[2].animations[0]) : null,
+                        'jump': animData[3] ? charMixer.clipAction(animData[3].animations[0]) : null,
+                        'fall': animData[4] ? charMixer.clipAction(animData[4].animations[0]) : null,
+                        'driver': (animData[5] && animData[5].animations.length > 0) ? charMixer.clipAction(animData[5].animations[0]) : (animData[0] ? charMixer.clipAction(animData[0].animations[0]) : null),
+                        'passenger': (animData[6] && animData[6].animations.length > 0) ? charMixer.clipAction(animData[6].animations[0]) : (animData[0] ? charMixer.clipAction(animData[0].animations[0]) : null)
+                    };
+                    
+                    if (charActions['jump']) { charActions['jump'].setLoop(THREE.LoopOnce); charActions['jump'].clampWhenFinished = true; }
+
+                    const charData = {
+                        mesh: localClone, mixer: charMixer, actions: charActions, 
+                        activeAction: charActions['idle'], currentAnimName: 'idle',
+                        velocity: new THREE.Vector3(), onGround: false, isJumping: false, isFollowing: false,
+                        spawnPoint: spawnPosition.clone() 
+                    };
+
+                    charMixer.addEventListener('finished', (e) => { if (e.action === charActions['jump']) charData.isJumping = false; });
+                    if (charData.activeAction) charData.activeAction.play();
+                    
+                    characters.push(charData);
+                    if (characters.length > 1) charData.mesh.visible = false; 
+                }
+
+                await loadAndPrepareCharacter('character.fbx', 'Player1', SPAWN_POINTS.player1);
+                await loadAndPrepareCharacter('2ndcharacter.fbx', 'Player2', SPAWN_POINTS.player2);
+
+                try { carData.mesh = await loader.loadAsync('car.glb'); } catch(e) {
+                    const geo = new THREE.BoxGeometry(2, 1.2, 4.5);
+                    const mat = new THREE.MeshStandardMaterial({color: 0xcc2222, roughness: 0.3, metalness: 0.8});
+                    carData.mesh = new THREE.Mesh(geo, mat);
+                }
+                
+                carData.mesh.scale.setScalar(CAR_CONFIG.scale);
+                carData.mesh.position.copy(CAR_CONFIG.spawnPos);
+                
+                carData.mesh.traverse(c => {
+                    if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; collidableMeshList.push(c); }
+                });
+                
+                carData.mesh.visible = false; 
+                scene.add(carData.mesh);
+
+                carData.mixer = new THREE.AnimationMixer(carData.mesh);
+                try {
+                    const carAnimFile = await gltfLoader.loadAsync('caranimation.glb');
+                    if (carAnimFile.animations.length > 0) {
+                        carData.driveAction = carData.mixer.clipAction(carAnimFile.animations[0]);
+                        carData.driveAction.play();
+                        carData.driveAction.paused = true; 
+                    }
+                } catch (e) {}
+
+            } catch (err) { console.error(err); }
+        }
+
+        // --- T-POSE FIXED REMOTE PLAYER HANDLING ---
+        function updateRemotePlayer(data) {
+            if (!remotePlayers[data.uid]) {
+                if(baseCharacters.length === 0) return;
+                const cIdx = data.charIndex < baseCharacters.length ? data.charIndex : 0;
+                const base = baseCharacters[cIdx];
+                
+                const clone = SkeletonUtils.clone(base.mesh);
+                scene.add(clone);
+                
+                const mixer = new THREE.AnimationMixer(clone);
+                const charActions = {
+                    'idle': base.anims[0] ? mixer.clipAction(base.anims[0].animations[0]) : null,
+                    'walk': base.anims[1] ? mixer.clipAction(base.anims[1].animations[0]) : null,
+                    'run': base.anims[2] ? mixer.clipAction(base.anims[2].animations[0]) : null,
+                    'jump': base.anims[3] ? mixer.clipAction(base.anims[3].animations[0]) : null,
+                    'fall': base.anims[4] ? mixer.clipAction(base.anims[4].animations[0]) : null,
+                    'driver': (base.anims[5] && base.anims[5].animations.length > 0) ? mixer.clipAction(base.anims[5].animations[0]) : (base.anims[0] ? mixer.clipAction(base.anims[0].animations[0]) : null),
+                    'passenger': (base.anims[6] && base.anims[6].animations.length > 0) ? mixer.clipAction(base.anims[6].animations[0]) : (base.anims[0] ? mixer.clipAction(base.anims[0].animations[0]) : null)
+                };
+
+                let activeAction = charActions['idle'] || Object.values(charActions)[0];
+                if(activeAction) activeAction.play();
+
+                remotePlayers[data.uid] = {
+                    uid: data.uid, name: data.name, mesh: clone, mixer: mixer, actions: charActions,
+                    activeAction: activeAction, charIndex: cIdx,
+                    targetPos: new THREE.Vector3(data.x, data.y, data.z), targetRot: data.rotY,
+                    anim: data.anim, carRole: data.carRole
+                };
+            } else {
+                const rp = remotePlayers[data.uid];
+                rp.name = data.name; rp.targetPos.set(data.x, data.y, data.z); rp.targetRot = data.rotY; rp.carRole = data.carRole;
+                
+                // FIX: T-Pose occurs during clone swap if actions aren't completely rebuilt and restarted
+                if (rp.charIndex !== data.charIndex) {
+                    const oldPos = rp.mesh.position.clone();
+                    const oldRot = rp.mesh.quaternion.clone();
+                    scene.remove(rp.mesh);
+                    
+                    const base = baseCharacters[data.charIndex < baseCharacters.length ? data.charIndex : 0];
+                    rp.mesh = SkeletonUtils.clone(base.mesh); 
+                    rp.mesh.position.copy(oldPos);
+                    rp.mesh.quaternion.copy(oldRot);
+                    scene.add(rp.mesh);
+                    
+                    rp.mixer = new THREE.AnimationMixer(rp.mesh); 
+                    rp.charIndex = data.charIndex;
+
+                    // Rebuild actions for new mixer
+                    rp.actions = {
+                        'idle': base.anims[0] ? rp.mixer.clipAction(base.anims[0].animations[0]) : null,
+                        'walk': base.anims[1] ? rp.mixer.clipAction(base.anims[1].animations[0]) : null,
+                        'run': base.anims[2] ? rp.mixer.clipAction(base.anims[2].animations[0]) : null,
+                        'jump': base.anims[3] ? rp.mixer.clipAction(base.anims[3].animations[0]) : null,
+                        'fall': base.anims[4] ? rp.mixer.clipAction(base.anims[4].animations[0]) : null,
+                        'driver': (base.anims[5] && base.anims[5].animations.length > 0) ? rp.mixer.clipAction(base.anims[5].animations[0]) : (base.anims[0] ? rp.mixer.clipAction(base.anims[0].animations[0]) : null),
+                        'passenger': (base.anims[6] && base.anims[6].animations.length > 0) ? rp.mixer.clipAction(base.anims[6].animations[0]) : (base.anims[0] ? rp.mixer.clipAction(base.anims[0].animations[0]) : null)
+                    };
+                    if (rp.actions['jump']) { rp.actions['jump'].setLoop(THREE.LoopOnce); rp.actions['jump'].clampWhenFinished = true; }
+
+                    // Force play idle instantly to prevent T-pose frame
+                    rp.activeAction = null;
+                    let fallbackAction = rp.actions['idle'] || Object.values(rp.actions)[0];
+                    if (fallbackAction) {
+                        fallbackAction.reset().play();
+                        rp.activeAction = fallbackAction;
+                        rp.anim = 'idle';
+                    }
+                }
+
+                // Handle regular animation updates with fallback protection
+                let reqAnim = data.anim;
+                if (!rp.actions[reqAnim]) reqAnim = 'idle'; 
+
+                if (rp.anim !== reqAnim && rp.actions[reqAnim]) {
+                    if (rp.activeAction) rp.activeAction.fadeOut(0.2);
+                    rp.activeAction = rp.actions[reqAnim];
+                    rp.activeAction.reset().fadeIn(0.2).play();
+                    rp.anim = reqAnim;
+                }
+                
+                // Desync protection for car roles
+                if (rp.carRole === 'driver' && rp.anim !== 'driver' && rp.actions['driver']) {
+                    if (rp.activeAction) rp.activeAction.fadeOut(0.2);
+                    rp.activeAction = rp.actions['driver'];
+                    rp.activeAction.reset().fadeIn(0.2).play();
+                    rp.anim = 'driver';
+                } else if (rp.carRole === 'passenger' && rp.anim !== 'passenger' && rp.actions['passenger']) {
+                    if (rp.activeAction) rp.activeAction.fadeOut(0.2);
+                    rp.activeAction = rp.actions['passenger'];
+                    rp.activeAction.reset().fadeIn(0.2).play();
+                    rp.anim = 'passenger';
+                }
+            }
+        }
+
+        function removeRemotePlayer(uid) {
+            if (remotePlayers[uid]) { scene.remove(remotePlayers[uid].mesh); delete remotePlayers[uid]; }
+        }
+
+        function syncLocalPlayerState() {
+            // FIX: Do not broadcast state while switching character to prevent mid-transition T-pose
+            if (characters.length === 0 || isSwitching) return; 
+            const activeChar = characters[activeCharIndex];
+            network.broadcast('player_state', {
+                name: playerName, charIndex: activeCharIndex,
+                x: activeChar.mesh.position.x, y: activeChar.mesh.position.y, z: activeChar.mesh.position.z,
+                rotY: activeChar.mesh.rotation.y, anim: activeChar.currentAnimName, carRole: localCarRole
+            });
+        }
+
+        function syncLocalCarState() {
+            if (!carData.mesh || !carData.isSpawned) return;
+            if (localCarRole === 'driver') {
+                network.broadcast('car_state', {
+                    active: true, speed: carData.speed,
+                    x: carData.mesh.position.x, y: carData.mesh.position.y, z: carData.mesh.position.z, rotY: carData.mesh.rotation.y,
+                    driverId: network.uid, passengerId: carData.passengerId
+                });
+            }
+        }
+
+        // --- POST PROCESSING ---
+        function setupPostProcessing() {
+            if (isMobile) return; 
+            composer = new EffectComposer(renderer);
+            composer.addPass(new RenderPass(scene, camera));
+            bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+            bloomPass.threshold = 0.80; bloomPass.strength = 0.25; bloomPass.radius = 0.5;
+            composer.addPass(bloomPass);
+            composer.addPass(new OutputPass());
+            fxaaPass = new ShaderPass(FXAAShader);
+            fxaaPass.material.uniforms['resolution'].value.x = 1 / window.innerWidth;
+            fxaaPass.material.uniforms['resolution'].value.y = 1 / window.innerHeight;
+            composer.addPass(fxaaPass);
+        }
+
+        function applyPerformanceSettings(enablePerf) {
+            performanceMode = !!enablePerf;
+            renderer.setPixelRatio(performanceMode ? 1 : Math.min(window.devicePixelRatio || 1, 1.5));
+            composerEnabled = !performanceMode; 
+            scene.background = performanceMode ? new THREE.Color(0x8cb6d9) : (envMapTexture || new THREE.Color(0x8cb6d9));
+            const perfBtn = document.getElementById('perf-toggle'); if (perfBtn) perfBtn.textContent = `Perf: ${performanceMode ? 'ON' : 'OFF'}`;
+        }
+
+        function toggleShadows() {
+            shadowsEnabled = !shadowsEnabled; renderer.shadowMap.enabled = shadowsEnabled;
+            scene.traverse((obj) => { if (obj.isMesh) { obj.castShadow = shadowsEnabled; obj.receiveShadow = shadowsEnabled; if(obj.material) obj.material.needsUpdate = true; } });
+            const shadowBtn = document.getElementById('shadow-toggle'); if (shadowBtn) shadowBtn.textContent = `Shadows: ${shadowsEnabled ? 'ON' : 'OFF'}`;
+        }
+
+        function setupAudio() {
+            listener = new THREE.AudioListener(); camera.add(listener);
+            const audioLoader = new THREE.AudioLoader(loadingManager);
+            function loadSound(name, file, loop = false, vol = 1.0) {
+                const sound = new THREE.Audio(listener); audioLoader.load(file, buffer => { sound.setBuffer(buffer); sound.setLoop(loop); sound.setVolume(vol); sounds[name] = sound; }, undefined, () => {});
+            }
+            loadSound('walk', 'walk.mp3', true, 0.4); loadSound('run', 'run.mp3', true, 0.7);
+            loadSound('jump', 'jump.mp3', false, 1.0); loadSound('land', 'land.mp3', false, 0.9);
+            loadSound('switch', 'switch.mp3', false, 1.0); 
+            loadSound('car_start', 'car_start.mp3', false, 1.0); loadSound('car_idle', 'car_idle.mp3', true, 0.0);
+            loadSound('car_accelerate', 'car_accelerate.mp3', false, 0.0); loadSound('car_move', 'car_move.mp3', true, 0.0);
+            loadSound('car_reverse', 'car_reverse.mp3', true, 0.0); loadSound('car_horn', 'car_horn.mp3', false, 1.0);
+        }
+
+        function createAxisHelpers(baseLength = 5) {
+            axisGroup = new THREE.Group();
+            axisX = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(baseLength,0,0)]), new THREE.LineBasicMaterial({ color: 0xff4444 }));
+            axisY = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,baseLength,0)]), new THREE.LineBasicMaterial({ color: 0x44ff44 }));
+            axisZ = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,baseLength)]), new THREE.LineBasicMaterial({ color: 0x4444ff }));
+            axisX.visible = axisY.visible = axisZ.visible = false;
+            axisGroup.add(axisX, axisY, axisZ); axisGroup.visible = false; scene.add(axisGroup);
+        }
+
+        function bindAxisUI() {
+            const axX = document.getElementById('axis-x'), axY = document.getElementById('axis-y'), axZ = document.getElementById('axis-z'), globalBtn = document.getElementById('show-global-axis');
+            const updateAxis = () => { axisX.visible=axX.checked; axisY.visible=axY.checked; axisZ.visible=axZ.checked; axisGroup.visible = (axisX.visible || axisY.visible || axisZ.visible) || showGlobalAxis; };
+            axX.addEventListener('change', updateAxis); axY.addEventListener('change', updateAxis); axZ.addEventListener('change', updateAxis);
+            globalBtn.addEventListener('click', () => { showGlobalAxis = !showGlobalAxis; globalBtn.textContent = showGlobalAxis ? 'Global On' : 'Global'; updateAxis(); });
+            document.getElementById('perf-toggle').addEventListener('click', () => applyPerformanceSettings(!performanceMode));
+            document.getElementById('shadow-toggle').addEventListener('click', () => toggleShadows());
+            document.getElementById('shadow-toggle').textContent = `Shadows: ${shadowsEnabled ? 'ON' : 'OFF'}`;
+        }
+
+        // --- CAR INTERACTION (FIXED ANY-PLAYER SPAWN) ---
+        function attemptEnterCarAs(role) { 
+            if (!carData.mesh || isSwitching || characters.length === 0 || !carData.isSpawned) return;
+            const activeChar = characters[activeCharIndex];
+            const dist = activeChar.mesh.position.distanceTo(carData.mesh.position);
+            
+            if (dist < CAR_CONFIG.interactionDist) {
+                if (role === 'driver' && carData.driverId && carData.driverId !== network.uid) {
+                    network.broadcast('kick_driver', { target: carData.driverId });
+                }
+
+                localCarRole = role;
+                activeChar.velocity.set(0,0,0);
+                mobileSprintToggle = false; keys.shift = false;
+                if (sounds.walk && sounds.walk.isPlaying) sounds.walk.stop();
+                if (sounds.run && sounds.run.isPlaying) sounds.run.stop();
+
+                if (role === 'driver') carData.driverId = network.uid;
+                if (role === 'passenger') carData.passengerId = network.uid;
+
+                syncLocalPlayerState();
+                syncLocalCarState();
+            }
+        }
+
+        function forceExitCar() {
+            if (localCarRole === 'none') return;
+            const role = localCarRole;
+            localCarRole = 'none';
+            const activeChar = characters[activeCharIndex];
+            activeChar.mesh.visible = true;
+            
+            const exitOffset = new THREE.Vector3(role === 'driver' ? 2.5 : -2.5, 0, 0).applyQuaternion(carData.mesh.quaternion);
+            activeChar.mesh.position.copy(carData.mesh.position).add(exitOffset);
+            activeChar.mesh.position.y += 1.0; 
+            activeChar.mesh.rotation.set(0, carData.mesh.rotation.y, 0);
+
+            switchStartLookAt.copy(activeChar.mesh.position);
+
+            if (role === 'driver') carData.driverId = null;
+            if (role === 'passenger') carData.passengerId = null;
+
+            // Immediately force idle animation on exit to prevent T-pose
+            fadeToAction(activeChar, 'idle', 0.2);
+
+            syncLocalPlayerState();
+            syncLocalCarState();
+        }
+
+        function handleCarKeybind(code) {
+            if (code === 'F8' || code === 'KeyF8') { 
+                // FIX: Anyone can spawn. Locked to single instance.
+                if (!carData.isSpawned && !carSpawnLocked && window.currentGameState === 'playing') {
+                    carSpawnLocked = true;
+                    carData.mesh.position.copy(CAR_CONFIG.spawnPos);
+                    carData.mesh.rotation.set(0,0,0);
+                    carData.isSpawned = true;
+                    carData.mesh.visible = true;
+                    carData.driverId = null; carData.passengerId = null;
+                    network.broadcast('spawn_car', { x: CAR_CONFIG.spawnPos.x, y: CAR_CONFIG.spawnPos.y, z: CAR_CONFIG.spawnPos.z, rotY: 0 });
+                    syncLocalCarState();
+                }
+            } else if (code === 'KeyF') { 
+                if (localCarRole !== 'none') forceExitCar(); else attemptEnterCarAs('driver');
+            } else if (code === 'KeyG') { 
+                if (localCarRole === 'none') attemptEnterCarAs('passenger');
+            }
+        }
+
+        function triggerCharacterSwitch() {
+            if (isSwitching || characters.length <= 1 || localCarRole !== 'none') return;
+            isSwitching = true; switchTime = 0;
+            if (sounds.switch) { if (sounds.switch.isPlaying) sounds.switch.stop(); sounds.switch.play(); }
+            if (sounds.walk && sounds.walk.isPlaying) sounds.walk.stop();
+            if (sounds.run && sounds.run.isPlaying) sounds.run.stop();
+
+            switchStartCamPos.copy(camera.position);
+            const sourceMesh = characters[activeCharIndex].mesh;
+            switchStartLookAt.copy(sourceMesh.position); switchStartLookAt.y += (currentCamIndex === 1) ? 1.7 : 1.5;
+
+            keys.w = keys.a = keys.s = keys.d = keys.shift = keys.space = false; joystick.active = false; mobileSprintToggle = false;
+
+            characters[activeCharIndex].mesh.visible = false;
+            activeCharIndex = (activeCharIndex + 1) % characters.length;
+            const targetMesh = characters[activeCharIndex].mesh;
+            targetMesh.visible = true; targetMesh.position.copy(sourceMesh.position); 
+            
+            // Network broadcast resumes after switch completes naturally
+
+            const offsetX = Math.sin(camState.angleX) * camState.curDist * Math.cos(camState.angleY);
+            const offsetZ = Math.cos(camState.angleX) * camState.curDist * Math.cos(camState.angleY);
+            const offsetY = camState.curDist * Math.sin(camState.angleY);
+            switchTargetCamPos.set(targetMesh.position.x + offsetX, targetMesh.position.y + camState.curHeight + offsetY, targetMesh.position.z + offsetZ);
+            switchTargetLookAt.copy(targetMesh.position); switchTargetLookAt.y += (currentCamIndex === 1) ? 1.7 : 1.5;
+            switchControlPoint.copy(switchStartCamPos).lerp(switchTargetCamPos, 0.5); switchControlPoint.y = Math.max(switchStartCamPos.y, switchTargetCamPos.y) + 30; 
+        }
+
+        function setupInputs() {
+            const unlockAudio = () => { if (listener && listener.context && listener.context.state === 'suspended') listener.context.resume(); };
+            document.addEventListener('click', unlockAudio); document.addEventListener('touchstart', unlockAudio, {passive: true});
+
+            document.addEventListener('keydown', e => {
+                if (window.currentGameState === 'lobby' && e.target.tagName !== 'INPUT') return; 
+                if (e.target.tagName === 'INPUT') return; 
+
+                const map = { KeyW:'w', KeyA:'a', KeyS:'s', KeyD:'d', ShiftLeft:'shift', Space:'space', KeyQ:'q', KeyE:'e', KeyF:'f', KeyG:'g', F8:'f8' };
+                if (map[e.code] !== undefined) keys[map[e.code]] = true;
+                
+                if (e.code === 'KeyF' || e.code === 'KeyG' || e.code === 'F8') handleCarKeybind(e.code);
+                if (e.code === 'KeyC') triggerCharacterSwitch();
+                if (e.code === 'KeyE' && localCarRole === 'driver') { if (sounds.car_horn && sounds.car_horn.buffer) { if (sounds.car_horn.isPlaying) sounds.car_horn.stop(); sounds.car_horn.play(); } }
+                if (e.code === 'KeyT') { e.preventDefault(); document.getElementById('ingame-chat-input').focus(); }
+                if (e.code === 'KeyV') { if (localCarRole !== 'none') currentCarCamIndex = (currentCarCamIndex + 1) % CAR_CAMERA_MODES.length; else currentCamIndex = (currentCamIndex + 1) % CAMERA_MODES.length; }
+                if (e.code === 'KeyL') applyPerformanceSettings(!performanceMode); 
+                if (e.code === 'KeyP') toggleShadows(); 
+            });
+            
+            document.addEventListener('keyup', e => {
+                const map = { KeyW:'w', KeyA:'a', KeyS:'s', KeyD:'d', ShiftLeft:'shift', Space:'space', KeyQ:'q', KeyE:'e', KeyF:'f', KeyG:'g', F8:'f8' };
+                if (map[e.code] !== undefined) keys[map[e.code]] = false;
+            });
+
+            document.addEventListener('mousemove', e => {
+                if (document.pointerLockElement === document.body && window.currentGameState === 'playing') {
+                    if (isSwitching) return; 
+                    const sensitivity = 0.002; camState.angleX -= e.movementX * sensitivity; camState.angleY -= e.movementY * sensitivity;
+                    camState.angleY = Math.max(0.05, Math.min(Math.PI / 2.2, camState.angleY));
+                }
+            });
+
+            document.addEventListener('mousedown', (e) => {
+                if(e.pointerType === "touch" || window.innerWidth <= 900 || window.currentGameState === 'lobby' || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return; 
+                document.body.requestPointerLock();
+            });
+
+            const btnJump = document.getElementById('btn-jump');
+            btnJump.addEventListener('touchstart', e => { e.preventDefault(); if(!isSwitching) keys.space = true; btnJump.classList.add('active-toggle'); });
+            btnJump.addEventListener('touchend', e => { e.preventDefault(); keys.space = false; btnJump.classList.remove('active-toggle'); });
+
+            const btnSwitchChar = document.getElementById('btn-switch-char');
+            btnSwitchChar.addEventListener('touchstart', e => { e.preventDefault(); triggerCharacterSwitch(); btnSwitchChar.classList.add('active-toggle'); });
+            btnSwitchChar.addEventListener('touchend', e => { e.preventDefault(); btnSwitchChar.classList.remove('active-toggle'); });
+
+            const btnSprint = document.getElementById('btn-sprint');
+            btnSprint.addEventListener('touchstart', e => { e.preventDefault(); if(isSwitching) return; mobileSprintToggle = !mobileSprintToggle; btnSprint.classList.toggle('active-toggle', mobileSprintToggle); });
+
+            document.getElementById('btn-cam-swap').addEventListener('touchstart', e => { e.preventDefault(); if (localCarRole !== 'none') currentCarCamIndex = (currentCarCamIndex + 1) % CAR_CAMERA_MODES.length; else currentCamIndex = (currentCamIndex + 1) % CAMERA_MODES.length; });
+            document.getElementById('btn-interact').addEventListener('touchstart', e => { e.preventDefault(); if (localCarRole !== 'none') forceExitCar(); else attemptEnterCarAs('driver'); });
+            document.getElementById('btn-passenger').addEventListener('touchstart', e => { e.preventDefault(); if (localCarRole === 'none') attemptEnterCarAs('passenger'); });
+            document.getElementById('btn-spawn-car').addEventListener('touchstart', e => { e.preventDefault(); handleCarKeybind('F8'); });
+            document.getElementById('btn-chat-mobile').addEventListener('touchstart', e => { e.preventDefault(); document.getElementById('ingame-chat-input').focus(); });
+
+            window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); if (composer) composer.setSize(window.innerWidth, window.innerHeight); });
+        }
+
+        function fadeToAction(charData, name, duration) {
+            if (!charData.actions || !charData.actions[name] || charData.activeAction === charData.actions[name]) return;
+            const prev = charData.activeAction;
+            charData.activeAction = charData.actions[name]; charData.currentAnimName = name; 
+            if (prev) prev.fadeOut(duration); charData.activeAction.reset().fadeIn(duration).play();
+        }
+
+        function checkCarProximity() {
+            if (!carData.mesh || characters.length === 0 || isSwitching) return;
+            const btnF = document.getElementById('btn-interact'), btnG = document.getElementById('btn-passenger'), btnHorn = document.getElementById('btn-horn'), btnSpawn = document.getElementById('btn-spawn-car');
+            
+            if (!carData.isSpawned && window.currentGameState === 'playing') btnSpawn.style.display = 'flex'; else btnSpawn.style.display = 'none';
+
+            if (localCarRole !== 'none') {
+                btnF.innerHTML = "EXIT"; btnF.style.display = 'flex'; btnG.style.display = 'none';
+                if(localCarRole === 'driver') btnHorn.style.display = 'flex'; 
+            } else {
+                const dist = characters[activeCharIndex].mesh.position.distanceTo(carData.mesh.position);
+                btnHorn.style.display = 'none'; 
+                if (dist < CAR_CONFIG.interactionDist && carData.isSpawned) { btnF.innerHTML = "DRIVE"; btnF.style.display = 'flex'; btnG.style.display = 'flex'; } 
+                else { btnF.style.display = 'none'; btnG.style.display = 'none'; }
+            }
+        }
+
+        function updateCarAudio(dt) {
+            if (localCarRole !== 'driver') {
+                ['car_start', 'car_idle', 'car_accelerate', 'car_move', 'car_reverse'].forEach(snd => { if (sounds[snd] && sounds[snd].isPlaying) sounds[snd].stop(); });
+                engineState = 'off'; return;
+            }
+            const isForwardInput = keys.w || (joystick.active && joystick.y < -0.1); const isReverseInput = keys.s || (joystick.active && joystick.y > 0.1);
+            if (engineState === 'off') { engineState = 'start'; if (sounds.car_start) { sounds.car_start.setVolume(1.0); sounds.car_start.play(); } } 
+            else if (engineState === 'start') { if (!sounds.car_start || !sounds.car_start.isPlaying || isForwardInput || isReverseInput) engineState = 'idle'; } 
+            else if (isForwardInput) { if (engineState === 'idle' || engineState === 'reverse') { engineState = 'accel'; if (sounds.car_accelerate) { if (sounds.car_accelerate.isPlaying) sounds.car_accelerate.stop(); sounds.car_accelerate.setVolume(0); sounds.car_accelerate.play(); } } else if (engineState === 'accel') { if (sounds.car_accelerate && !sounds.car_accelerate.isPlaying) engineState = 'move'; } } 
+            else if (isReverseInput) { engineState = 'reverse'; } else { engineState = 'idle'; }
+
+            const targetVols = { car_idle: engineState === 'idle' ? 1.0 : 0.0, car_accelerate: engineState === 'accel' ? 1.0 : 0.0, car_move: engineState === 'move' ? 1.0 : 0.0, car_reverse: engineState === 'reverse' ? 1.0 : 0.0 };
+            for (let key in targetVols) {
+                if (sounds[key] && sounds[key].buffer) {
+                    let cv = sounds[key].getVolume(), tv = targetVols[key];
+                    if (cv < tv) { cv = Math.min(cv + 3.5 * dt, tv); sounds[key].setVolume(cv); if (!sounds[key].isPlaying && cv > 0) sounds[key].play(); } 
+                    else if (cv > tv) { cv = Math.max(cv - 3.5 * dt, tv); sounds[key].setVolume(cv); if (cv === 0 && sounds[key].isPlaying) sounds[key].stop(); }
+                }
+            }
+        }
+
+        function updatePhysics(dt) {
+            if (characters.length === 0 || window.currentGameState === 'lobby') return; 
+
+            // CAR PHYSICS
+            if (carData.isSpawned && carData.mesh) {
+                if (localCarRole === 'driver') {
+                    let throttle = 0, steerInput = 0;
+                    if (keys.w) throttle += 1; if (keys.s) throttle -= 1;
+                    if (keys.a) steerInput += 1; if (keys.d) steerInput -= 1;
+
+                    if (keys.space) carData.speed = THREE.MathUtils.lerp(carData.speed, 0, dt * CAR_CONFIG.braking);
+                    else if (throttle !== 0) { carData.speed += throttle * CAR_CONFIG.acceleration * dt; carData.speed = THREE.MathUtils.clamp(carData.speed, -CAR_CONFIG.maxSpeed * 0.4, CAR_CONFIG.maxSpeed); }
+                    else carData.speed = THREE.MathUtils.lerp(carData.speed, 0, dt * CAR_CONFIG.friction);
+                    if (Math.abs(carData.speed) < 0.1) carData.speed = 0;
+
+                    if (Math.abs(carData.speed) > 0) {
+                        const steerAmount = steerInput * CAR_CONFIG.steerSpeed * dt * Math.min(Math.abs(carData.speed) / 10.0, 1.0) * (carData.speed > 0 ? 1 : -1);
+                        carData.mesh.rotation.y += steerAmount;
+                    }
+
+                    const moveDir = new THREE.Vector3(0, 0, 1).applyQuaternion(carData.mesh.quaternion);
+                    let carBlocked = false;
+                    if (Math.abs(carData.speed) > 0.01) {
+                        carRay.set(new THREE.Vector3(carData.mesh.position.x, carData.mesh.position.y + 1.0, carData.mesh.position.z), carData.speed > 0 ? moveDir : moveDir.clone().negate());
+                        const hits = carRay.intersectObjects(collidableMeshList, true);
+                        if (hits.find(h => { let c=h.object; while(c){if(c===carData.mesh)return false;c=c.parent;}return true; })?.distance < 2.5) carBlocked = true;
+                    }
+                    if (!carBlocked) carData.mesh.position.addScaledVector(moveDir, carData.speed * dt); else carData.speed = 0; 
+                    
+                    downRay.set(new THREE.Vector3(carData.mesh.position.x, carData.mesh.position.y + 2, carData.mesh.position.z), new THREE.Vector3(0, -1, 0));
+                    const hits = downRay.intersectObjects(terrainMeshList, true);
+                    if (hits.length > 0) carData.mesh.position.y = hits[0].point.y;
+                } else {
+                    carData.mesh.position.lerp(targetCarPos, 0.2);
+                    const qTarget = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), targetCarRot);
+                    carData.mesh.quaternion.slerp(qTarget, 0.2);
+                }
+
+                if (carData.mixer) {
+                    carData.mixer.update(dt);
+                    if (carData.driveAction) {
+                        if (Math.abs(carData.speed) > 0.1) { carData.driveAction.paused = false; carData.driveAction.timeScale = carData.speed > 0 ? 1 : -1; } 
+                        else carData.driveAction.paused = true;
+                    }
+                }
+            }
+            
+            // LOCAL CHARACTER PHYSICS
+            let charData = characters[activeCharIndex];
+            let charMesh = charData.mesh;
+
+            if (localCarRole !== 'none') {
+                const localOffset = localCarRole === 'driver' ? SEAT_POSITIONS.driver : SEAT_POSITIONS.passenger; 
+                charMesh.position.copy(carData.mesh.position).add(localOffset.clone().applyQuaternion(carData.mesh.quaternion));
+                charMesh.quaternion.copy(carData.mesh.quaternion); 
+                charData.velocity.set(0,0,0);
+                charMesh.visible = false; 
+                fadeToAction(charData, localCarRole === 'driver' ? 'driver' : 'passenger', 0.2);
+            } else {
+                let isRunning = keys.shift || mobileSprintToggle;
+                const forward = new THREE.Vector3(-Math.sin(camState.angleX), 0, -Math.cos(camState.angleX));
+                const right = new THREE.Vector3(Math.cos(camState.angleX), 0, -Math.sin(camState.angleX));
+                let moveDir = new THREE.Vector3(0,0,0);
+
+                if (!isSwitching && window.currentGameState === 'playing') {
+                    if (keys.w) moveDir.add(forward); if (keys.s) moveDir.sub(forward);
+                    if (keys.d) moveDir.add(right); if (keys.a) moveDir.sub(right);
+                }
+
+                const speed = isRunning ? CONFIG.runSpeed : CONFIG.walkSpeed;
+                const isMoving = moveDir.lengthSq() > 0.01;
+
+                if (!isSwitching) {
+                    if (charData.onGround && !charData.isJumping) {
+                        if (isMoving) {
+                            if (isRunning) { if (sounds.walk && sounds.walk.isPlaying) sounds.walk.stop(); if (sounds.run && !sounds.run.isPlaying) sounds.run.play(); } 
+                            else { if (sounds.run && sounds.run.isPlaying) sounds.run.stop(); if (sounds.walk && !sounds.walk.isPlaying) sounds.walk.play(); }
+                        } else { if (sounds.walk && sounds.walk.isPlaying) sounds.walk.stop(); if (sounds.run && sounds.run.isPlaying) sounds.run.stop(); }
+                    } else { if (sounds.walk && sounds.walk.isPlaying) sounds.walk.stop(); if (sounds.run && sounds.run.isPlaying) sounds.run.stop(); }
+                }
+
+                let isBlocked = false;
+                if (isMoving) {
+                    const normalizedDir = moveDir.clone().normalize();
+                    forwardRay.set(new THREE.Vector3(charMesh.position.x, charMesh.position.y+1.0, charMesh.position.z), normalizedDir);
+                    if (forwardRay.intersectObjects(collidableMeshList, true)[0]?.distance < 0.5) isBlocked = true;
+                    
+                    if (!isBlocked) {
+                        charMesh.position.addScaledVector(normalizedDir, speed * dt);
+                        const targetRot = Math.atan2(normalizedDir.x, normalizedDir.z);
+                        let rotDiff = targetRot - charMesh.rotation.y;
+                        while (rotDiff > Math.PI) rotDiff -= Math.PI * 2; while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+                        charMesh.rotation.y += rotDiff * CONFIG.rotSpeed * dt;
+                        if (!charData.isJumping && charData.onGround) fadeToAction(charData, isRunning ? 'run' : 'walk', 0.2);
+                    } else if (!charData.isJumping && charData.onGround) fadeToAction(charData, 'idle', 0.2);
+                } else if (!charData.isJumping && charData.onGround) fadeToAction(charData, 'idle', 0.2);
+
+                if (!isSwitching && keys.space && charData.onGround && !charData.isJumping && window.currentGameState === 'playing') {
+                    charData.velocity.y = CONFIG.jumpForce; charData.onGround = false; charData.isJumping = true;
+                    if (sounds.jump) { if (sounds.jump.isPlaying) sounds.jump.stop(); sounds.jump.play(); }
+                    fadeToAction(charData, 'jump', 0.1);
+                }
+
+                if (!charData.onGround && charData.velocity.y < -3.0 && !charData.isJumping) fadeToAction(charData, 'fall', 0.2);
+
+                charData.velocity.y += CONFIG.gravity * dt;
+                charMesh.position.y += charData.velocity.y * dt;
+
+                downRay.set(new THREE.Vector3(charMesh.position.x, charMesh.position.y+2.0, charMesh.position.z), new THREE.Vector3(0, -1, 0));
+                const hit = downRay.intersectObjects(collidableMeshList, true)[0];
+                if (hit) {
+                    if (hit.distance <= 2.2 && charData.velocity.y <= 0) {
+                        if (!charData.onGround && sounds.land) { if (sounds.land.isPlaying) sounds.land.stop(); sounds.land.play(); }
+                        charMesh.position.y = hit.point.y; charData.velocity.y = 0; charData.onGround = true;
+                    } else if (hit.distance > 2.2) charData.onGround = false;
+                } else {
+                    charData.onGround = false;
+                    if (charMesh.position.y < -50) { charMesh.position.copy(charData.spawnPoint); charData.velocity.y = 0; }
+                }
+            }
+
+            // UPDATE REMOTE PLAYERS
+            Object.values(remotePlayers).forEach(rp => {
+                if (rp.carRole !== 'none' && carData.mesh) {
+                    const offset = rp.carRole === 'driver' ? SEAT_POSITIONS.driver : SEAT_POSITIONS.passenger;
+                    rp.mesh.position.copy(carData.mesh.position).add(offset.clone().applyQuaternion(carData.mesh.quaternion));
+                    rp.mesh.quaternion.copy(carData.mesh.quaternion);
+                } else {
+                    rp.mesh.position.lerp(rp.targetPos, 0.2);
+                    const qTarget = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), rp.targetRot);
+                    rp.mesh.quaternion.slerp(qTarget, 0.2);
+                }
+                if (rp.mixer) rp.mixer.update(dt);
+            });
+        }
+
+        function updateGameCamera() {
+            if (characters.length === 0 || window.currentGameState === 'lobby') return;
+            const activeMesh = characters[activeCharIndex].mesh;
+            const target = CAMERA_MODES[currentCamIndex];
+            camState.curDist = THREE.MathUtils.lerp(camState.curDist, target.dist, 0.1);
+            camState.curHeight = THREE.MathUtils.lerp(camState.curHeight, target.height, 0.1);
+            
+            if (camState.curDist < 0.2) activeMesh.visible = false; else activeMesh.visible = true;
+
+            const offsetX = Math.sin(camState.angleX) * camState.curDist * Math.cos(camState.angleY);
+            const offsetZ = Math.cos(camState.angleX) * camState.curDist * Math.cos(camState.angleY);
+            const offsetY = camState.curDist * Math.sin(camState.angleY);
+            camera.position.copy(new THREE.Vector3(activeMesh.position.x + offsetX, activeMesh.position.y + camState.curHeight + offsetY, activeMesh.position.z + offsetZ));
+            camera.lookAt(activeMesh.position.x, activeMesh.position.y + ((currentCamIndex === 1) ? 1.7 : 1.5), activeMesh.position.z);
+        }
+
+        function updateCarCamera() {
+            if (!carData.mesh) return;
+            const target = CAR_CAMERA_MODES[currentCarCamIndex];
+            camState.curDist = THREE.MathUtils.lerp(camState.curDist, target.dist, 0.1);
+            camState.curHeight = THREE.MathUtils.lerp(camState.curHeight, target.height, 0.1);
+
+            const offsetX = Math.sin(camState.angleX) * camState.curDist * Math.cos(camState.angleY);
+            const offsetZ = Math.cos(camState.angleX) * camState.curDist * Math.cos(camState.angleY);
+            const offsetY = camState.curDist * Math.sin(camState.angleY);
+            camera.position.lerp(new THREE.Vector3(carData.mesh.position.x + offsetX, carData.mesh.position.y + camState.curHeight + offsetY, carData.mesh.position.z + offsetZ), 0.2); 
+            camera.lookAt(new THREE.Vector3(carData.mesh.position.x, carData.mesh.position.y + 1.2, carData.mesh.position.z));
+        }
+
+        function handleCinematicSwitchCamera(realDt) {
+            switchTime += realDt;
+            let t = Math.min(switchTime / switchDuration, 1.0);
+            let easeT = t * t * (3 - 2 * t);
+            camera.position.copy(new THREE.Vector3().copy(switchStartCamPos).lerp(switchControlPoint, easeT)).lerp(new THREE.Vector3().copy(switchControlPoint).lerp(switchTargetCamPos, easeT), easeT);
+            camera.lookAt(new THREE.Vector3().copy(switchStartLookAt).lerp(switchTargetLookAt, easeT));
+            camera.fov = 60 + Math.sin(easeT * Math.PI) * 35; camera.updateProjectionMatrix();
+            if (t >= 1.0) { 
+                isSwitching = false; 
+                camera.fov = 60; 
+                camera.updateProjectionMatrix(); 
+                syncLocalPlayerState(); // Resume sending state
+            }
+        }
+
+        function updateNameTags() {
+            const container = document.getElementById('name-tags-container');
+            container.innerHTML = ''; 
+            if(window.currentGameState === 'lobby') return; 
+
+            const allChars = [ { name: playerName, mesh: characters[activeCharIndex]?.mesh } ].concat(Object.values(remotePlayers));
+            allChars.forEach(char => {
+                if (!char.mesh || !char.mesh.visible) return;
+                const pos = char.mesh.position.clone();
+                pos.y += 2.1; 
+                pos.project(camera);
+                if (pos.z < 1 && pos.x > -1 && pos.x < 1 && pos.y > -1 && pos.y < 1) { 
+                    const tag = document.createElement('div');
+                    tag.className = 'player-name-tag';
+                    tag.innerText = char.name;
+                    tag.style.left = `${(pos.x * .5 + .5) * window.innerWidth}px`;
+                    tag.style.top = `${(pos.y * -.5 + .5) * window.innerHeight}px`;
+                    const dist = camera.position.distanceTo(char.mesh.position);
+                    tag.style.fontSize = `${Math.max(10, 20 - dist/5)}px`;
+                    container.appendChild(tag);
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!isGameReady && window.currentGameState !== 'lobby') return;
+            
+            const realDt = Math.min(clock.getDelta(), 0.1);
+            const gameTimeScale = isSwitching ? 0.1 : 1.0;
+            const scaledDt = realDt * gameTimeScale;
+            
+            characters.forEach(c => c.mixer.update(scaledDt));
+            updatePhysics(scaledDt); 
+            updateCarAudio(scaledDt); 
+            checkCarProximity(); 
+            updateNameTags();
+
+            if (isSwitching) handleCinematicSwitchCamera(realDt);
+            else if (localCarRole !== 'none') updateCarCamera(); 
+            else updateGameCamera(); 
+
+            _frameCount++; const now = performance.now(); const elapsed = (now - _lastFpsTime) / 1000;
+            if (elapsed >= 0.5) { if (fpsCounterEl) fpsCounterEl.textContent = Math.round((_frameCount / elapsed)); _frameCount = 0; _lastFpsTime = now; }
+            if (axisGroup) axisGroup.visible = showGlobalAxis;
+
+            // Pure 2D overlay optimization - pause 3D rendering while in lobby
+            if (window.currentGameState === 'lobby') return; 
+
+            if (composer && composerEnabled && !performanceMode && !isMobile) composer.render();
+            else renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
