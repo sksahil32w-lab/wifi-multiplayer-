@@ -402,7 +402,7 @@
         };
 
         const CAR_CONFIG = {
-            spawnPos: new THREE.Vector3(72, -53.93, -95), 
+            spawnPos: new THREE.Vector3(70, -53.93, -96), 
             scale: 30, maxSpeed: 30.0, acceleration: 15.0, braking: 25.0, friction: 5.0, steerSpeed: 2.0, interactionDist: 4.0
         };
 
@@ -439,11 +439,11 @@
         let activeCharIndex = 0;
         
         // Multi-spawn protection
-        let carSpawnLocked = false;
+        let carSpawnLocked = true;
 
         let carData = {
             mesh: null, mixer: null, driveAction: null, 
-            isSpawned: false, driverId: null, passengerId: null,
+            isSpawned: true, driverId: null, passengerId: null,
             speed: 0, steerAngle: 0
         };
 
@@ -485,7 +485,7 @@
         let localCarRole = 'none'; 
 
         let remotePlayers = {}; 
-        let targetCarPos = new THREE.Vector3();
+        let targetCarPos = new THREE.Vector3(70, -53.93, -96);
         let targetCarRot = 0;
 
         init();
@@ -900,7 +900,10 @@
                 await loadAndPrepareCharacter('character.fbx', 'Player1', SPAWN_POINTS.player1);
                 await loadAndPrepareCharacter('2ndcharacter.fbx', 'Player2', SPAWN_POINTS.player2);
 
-                try { carData.mesh = await loader.loadAsync('car.glb'); } catch(e) {
+                try { 
+                    const carGltf = await gltfLoader.loadAsync('car.glb'); 
+                    carData.mesh = carGltf.scene;
+                } catch(e) {
                     const geo = new THREE.BoxGeometry(2, 1.2, 4.5);
                     const mat = new THREE.MeshStandardMaterial({color: 0xcc2222, roughness: 0.3, metalness: 0.8});
                     carData.mesh = new THREE.Mesh(geo, mat);
@@ -913,7 +916,7 @@
                     if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; collidableMeshList.push(c); }
                 });
                 
-                carData.mesh.visible = false; 
+                carData.mesh.visible = true; 
                 scene.add(carData.mesh);
 
                 carData.mixer = new THREE.AnimationMixer(carData.mesh);
@@ -1535,6 +1538,13 @@
             if (isSwitching) handleCinematicSwitchCamera(realDt);
             else if (localCarRole !== 'none') updateCarCamera(); 
             else updateGameCamera(); 
+
+            if (characters.length > 0 && characters[activeCharIndex] && characters[activeCharIndex].mesh) {
+                const pos = characters[activeCharIndex].mesh.position;
+                if(document.getElementById('pos-display')) {
+                    document.getElementById('pos-display').textContent = `${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)}`;
+                }
+            }
 
             _frameCount++; const now = performance.now(); const elapsed = (now - _lastFpsTime) / 1000;
             if (elapsed >= 0.5) { if (fpsCounterEl) fpsCounterEl.textContent = Math.round((_frameCount / elapsed)); _frameCount = 0; _lastFpsTime = now; }
